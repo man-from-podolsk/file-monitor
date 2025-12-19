@@ -1,0 +1,21 @@
+[Unit]
+Description=File Integrity Monitor via auditd
+After=auditd.service
+Requires=auditd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/file-monitor.sh
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10
+User=root
+Group=root
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+ProtectHome=true
+ReadWritePaths=/var/cache/file-monitor /var/log/file-monitor /etc/audit/rules.d/wq /etc/file-monitor/
+
+[Install]
+WantedBy=multi-user.target
