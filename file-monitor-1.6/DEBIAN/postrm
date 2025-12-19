@@ -1,0 +1,38 @@
+#!/bin/sh
+set -e
+
+PACKAGE_NAME="file-monitor"
+PACKAGE_PATH="/usr/bin/file-monitor.sh"
+AUDIT_KEY="file-monitor"
+SERVICE_NAME="file-monitor.service"
+RULES_FILE="/etc/audit/rules.d/file-monitor.rules"
+CACHE_DIR="/var/cache/file-monitor"
+LOG_DIR="/var/log/file-monitor"
+
+case "$1" in
+    remove|purge)
+        if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+            systemctl stop "$SERVICE_NAME"
+        fi
+        systemctl disable --quiet "$SERVICE_NAME" 2>/dev/null || true
+        rm -f "/etc/systemd/system/$SERVICE_NAME" "PACKAGE_PATH"
+        systemctl daemon-reload || true
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    rm -rf "$CACHE_DIR"
+    rm -rf "$LOG_DIR"
+    rm -f "$RULES_FILE"
+    rm -f "/etc/file-monitor/file-monitor.conf"
+    rmdir --ignore-fail-on-non-empty /etc/file-monitor || true
+
+    if command -v auditctl >/dev/null 2>&1; then
+        auditctl -D -k "$AUDIT_KEY" >/dev/null 2>&1 || true
+    fi
+    if command -v augenrules >/dev/null 2>&1; then
+        augenrules --load >/dev/null 2>&1 || true
+    fi
+fi
+
+exit 0
