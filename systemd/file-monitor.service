@@ -5,7 +5,7 @@ Requires=auditd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/file-monitor.sh
+ExecStart=/usr/local/bin/file-monitor.sh
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=10
