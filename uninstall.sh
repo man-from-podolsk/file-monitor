@@ -67,7 +67,8 @@ if [ -f "$RULE_FILE" ]; then
 fi
 
 # Prompt: remove data?
-read -p "Remove log and cache data? (y/N): \n" -n 1 -r
+read -p "Remove log and cache data? (y/N): " -n 1 -r
+ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ -d /var/log/file-monitor ]; then
         rm -rf /var/log/file-monitor
