@@ -32,8 +32,8 @@ systemctl daemon-reload
 systemctl reset-failed file-monitor 2>/dev/null || true
 
 # Remove binary
-if [ -f /usr/local/bin/file-monitor.sh ]; then
-    rm -f /usr/local/bin/file-monitor.sh
+if [ -f /usr/bin/file-monitor.sh ]; then
+    rm -f /usr/bin/file-monitor.sh
     log_info "Removed binary."
 fi
 
@@ -68,7 +68,8 @@ fi
 
 # Prompt: remove data?
 read -p "Remove log and cache data? (y/N): " -n 1 -r
- echo
+
+echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ -d /var/log/file-monitor ]; then
         rm -rf /var/log/file-monitor
