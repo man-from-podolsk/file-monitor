@@ -81,5 +81,4 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 else
     log_info "Data directories preserved (/var/log/file-monitor, /var/cache/file-monitor)."
 fi
-
 log_success "file-monitor uninstalled successfully!"
