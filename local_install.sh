@@ -86,7 +86,7 @@ log_success "Audit subsystem installed successfully."
 
 # Copy files from local directory
 log_info "Copying local files..."
-install -Dm755 "$SCRIPT_DIR/script/file-monitor.sh" /usr/local/bin/file-monitor.sh
+install -Dm755 "$SCRIPT_DIR/script/file-monitor.sh" /usr/bin/file-monitor.sh
 install -Dm644 "$SCRIPT_DIR/systemd/file-monitor.service" /etc/systemd/system/file-monitor.service
 install -Dm644 "$SCRIPT_DIR/config/file-monitor.conf" /etc/file-monitor.conf
 install -Dm644 "$SCRIPT_DIR/logrotate/file-monitor" /etc/logrotate.d/file-monitor
