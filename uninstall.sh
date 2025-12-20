@@ -68,7 +68,7 @@ fi
 
 # Prompt: remove data?
 read -p "Remove log and cache data? (y/N): " -n 1 -r
-
+echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ -d /var/log/file-monitor ]; then
         rm -rf /var/log/file-monitor
