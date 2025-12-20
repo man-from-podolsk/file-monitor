@@ -15,7 +15,7 @@ StandardOutput=journal
 StandardError=journal
 NoNewPrivileges=true
 ProtectHome=true
-ReadWritePaths=/var/cache/file-monitor /var/log/file-monitor /etc/audit/rules.d/wq /etc/file-monitor/
+ReadWritePaths=/var/cache/file-monitor /var/log/file-monitor /etc/audit/rules.d/ /etc/file-monitor/
 
 [Install]
 WantedBy=multi-user.target
