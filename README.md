@@ -190,7 +190,9 @@ sudo systemctl enable --now file-monitor
 Чтобы полностью удалить file-monitor, используйте скрипт удаления:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/man-from-podolsk/file-monitor/main/uninstall.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/man-from-podolsk/file-monitor/main/uninstall.sh -o uninstall.sh
+sudo bash uninstall.sh
+rm -f uninstall.sh
 ```
 
 Или, если файлы доступны локально:
