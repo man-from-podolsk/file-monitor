@@ -71,10 +71,10 @@ log_success "Audit subsystem installed successfully."
 # Downloading files from GitHub REPO
 log_info "Downloading files from GitHub..."
 mkdir -p /tmp/file-monitor-install
-curl -sSfL "${BASE_URL}/script/file-monitor.sh" -o /tmp/file-monitor-install/file-monitor.sh
-curl -sSfL "${BASE_URL}/systemd/file-monitor.service" -o /tmp/file-monitor-install/file-monitor.service
-curl -sSfL "${BASE_URL}/config/file-monitor.conf" -o /tmp/file-monitor-install/file-monitor.conf
-curl -sSfL "${BASE_URL}/logrotate/file-monitor" -o /tmp/file-monitor-install/logrotate-file-monitor
+curl -#fL "${BASE_URL}/script/file-monitor.sh" -o /tmp/file-monitor-install/file-monitor.sh
+curl -#fL "${BASE_URL}/systemd/file-monitor.service" -o /tmp/file-monitor-install/file-monitor.service
+curl -#fL "${BASE_URL}/config/file-monitor.conf" -o /tmp/file-monitor-install/file-monitor.conf
+curl -#fL "${BASE_URL}/logrotate/file-monitor" -o /tmp/file-monitor-install/logrotate-file-monitor
 
 # Copy files
 install -Dm755 /tmp/file-monitor-install/file-monitor.sh /usr/local/bin/file-monitor.sh
