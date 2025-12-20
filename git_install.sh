@@ -77,7 +77,7 @@ curl -#fL "${BASE_URL}/config/file-monitor.conf" -o /tmp/file-monitor-install/fi
 curl -#fL "${BASE_URL}/logrotate/file-monitor" -o /tmp/file-monitor-install/logrotate-file-monitor
 
 # Copy files
-install -Dm755 /tmp/file-monitor-install/file-monitor.sh /usr/local/bin/file-monitor.sh
+install -Dm755 /tmp/file-monitor-install/file-monitor.sh /usr/bin/file-monitor.sh
 install -Dm644 /tmp/file-monitor-install/file-monitor.service /etc/systemd/system/file-monitor.service
 install -Dm644 /tmp/file-monitor-install/file-monitor.conf /etc/file-monitor.conf
 install -Dm644 /tmp/file-monitor-install/logrotate-file-monitor /etc/logrotate.d/file-monitor
