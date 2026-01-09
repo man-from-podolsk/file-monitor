@@ -1,13 +1,11 @@
 #!/bin/bash
-
 # === ПРОВЕРКИ СРАЗУ ===
 if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
     logger -t "file-monitor" "Error: Bash version < 4"
     exit 1
 fi
-
 # === Значения по умолчанию ===
-CONFIG_FILE="/etc/file-monitor/file-monitor.conf"
+CONFIG_FILE="/etc/file-monitor.conf"
 CACHE_DIR="/var/cache/file-monitor"
 LOG_FILE="/var/log/file-monitor/file-monitor.log"
 AUDIT_RULE_FILE="/etc/audit/rules.d/file-monitor.rules"
@@ -16,11 +14,9 @@ AUDIT_KEY="file-monitor"
 enable_diff="true"
 max_file_size_kb=1024
 declare -a PATHS=()
-
 # --------------------------------------------------------------------------------------------------
 # === ФУНКЦИИ ===
 # --------------------------------------------------------------------------------------------------
-
 # --- Загрузка конфигурации с валидацией ---
 load_config() {
     local tmp_cache_dir="$CACHE_DIR"
@@ -30,7 +26,6 @@ load_config() {
     local tmp_enable_diff="$enable_diff"
     local tmp_max_file_size_kb="$max_file_size_kb"
     local -a tmp_paths=()
-
     if [ -f "$CONFIG_FILE" ]; then
         while IFS='=' read -r key raw_value; do
             key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -91,7 +86,6 @@ load_config() {
             "/etc/fstab"
         )
     fi
-
     # Применяем только если всё прошло валидацию
     CACHE_DIR="$tmp_cache_dir"
     LOG_FILE="$tmp_log_file"
@@ -100,7 +94,6 @@ load_config() {
     enable_diff="$tmp_enable_diff"
     max_file_size_kb="$tmp_max_file_size_kb"
     PATHS=("${tmp_paths[@]}")
-
     # Гарантируем существование путей
     mkdir -p "$(dirname "$LOG_FILE")" "$CACHE_DIR" 2>/dev/null
     if ! touch "$LOG_FILE" &>/dev/null; then
@@ -108,7 +101,6 @@ load_config() {
         return 1
     fi
     chmod 644 "$LOG_FILE" 2>/dev/null
-
     # УСПЕХ: даже если конфига нет — это нормально
     return 0
 }
@@ -118,7 +110,6 @@ create_audit_rules() {
     local temp_rules=""
     local -a expanded_paths=()
     PATHS_TO_MONITOR=()
-
     for path in "${PATHS[@]}"; do
         eval "expanded_paths=($path)" 2>/dev/null || continue
         for item in "${expanded_paths[@]}"; do
@@ -144,14 +135,11 @@ create_audit_rules() {
             fi
         done
     done
-
     readarray -t PATHS_TO_MONITOR < <(printf '%s\n' "${PATHS_TO_MONITOR[@]}" | sort -u)
-
     if [ ${#PATHS_TO_MONITOR[@]} -eq 0 ]; then
         logger -t "file-monitor" "Error: No valid paths found to monitor."
         return 1
     fi
-
     {
         echo "# WARNING: This file is auto-generated. Manual changes will be lost."
         echo "# Auto-generated audit rules for file integrity monitoring"
@@ -160,9 +148,7 @@ create_audit_rules() {
         echo "#"
         printf '%s\n' "${PATHS_TO_MONITOR[@]}" | sed "s|.*|-a always,exit -F arch=b64 -F path=& -F perm=wa -k $AUDIT_KEY|"
     } > "$AUDIT_RULE_FILE"
-
     chmod 644 "$AUDIT_RULE_FILE"
-
     if command -v augenrules >/dev/null 2>&1; then
         if ! augenrules --load >/dev/null 2>&1; then
             logger -t "file-monitor" "Error: Failed to load rules via augenrules."
@@ -251,7 +237,7 @@ init_cache_for_monitored_files() {
         [ ! -f "$FILE" ] && continue
         local CACHE_PATH="$CACHE_DIR/${FILE//\//_}"
         if [ ! -f "${CACHE_PATH}.1" ]; then
-            create_cache_for_file "$FILE" "root"
+            create_cache_for_file "$FILE" "system"
         else
             local h1=$(sha256sum "$FILE" | cut -d' ' -f1)
             local h2=$(sha256sum "${CACHE_PATH}.1" | cut -d' ' -f1)
@@ -279,123 +265,119 @@ init_cache_for_monitored_files() {
 parse_audit_events() {
     local LAST=$(date -d "$INTERVAL seconds ago" "+%H:%M:%S")
     local CURR=$(date "+%H:%M:%S")
-    local EVENTS=$(ausearch -ts "$LAST" -te "$CURR" -k "$AUDIT_KEY" -i 2>/dev/null |
-                   sed -e ':a' -e '$!N' -e 's/\ntype=/ type=/; ta' -e 'P;D' |
-                   grep -v 'success=no' |
-                   grep -v 'name=(null)' |
-                   grep -v '~')
+    local EVENTS=$(ausearch -ts "$LAST" -te "$CURR" -k "$AUDIT_KEY" --format csv 2>/dev/null |
+                   grep -E -v '(auditctl|null|~|unset)' | tail -n +2)
     [ -z "$EVENTS" ] && return
 
     declare -A file_events
     while IFS= read -r event; do
-        local FILE=$(echo "$event" | grep -o 'name=[^ ]*' | sed 's/name=//; s/"//g' | head -n1)
-        [ -z "$FILE" ] && continue
-        local USER=$(echo "$event" | grep -o 'auid=[^ ]*' | sed 's/auid=//' | head -n1)
-        file_events["$FILE"]="${USER:-unknown}"
+        # Парсим CSV: колонки - ID(5), USER(8), ACTION(11), FILE(13)
+        local ID=$(echo "$event" | awk -F',' '{print $5}')
+        local USER=$(echo "$event" | awk -F',' '{print $8}')
+        local FILE=$(echo "$event" | awk -F',' '{print $13}')
+
+        [ -z "$ID" ] || [ -z "$USER" ] || [ -z "$FILE" ] && continue
+
+        # Проверяем, отслеживается ли файл 
+        local is_monitored=false
+        for mf in "${PATHS_TO_MONITOR[@]}"; do
+            [[ "$mf" == "$FILE" ]] && is_monitored=true && break
+        done
+        [ "$is_monitored" = false ] && continue
+
+        file_events["$FILE"]="${USER}:${ID}"
     done <<< "$EVENTS"
 
     for FILE in "${!file_events[@]}"; do
-        local USER="${file_events[$FILE]}"
+        IFS=':' read -r USER ID <<< "${file_events[$FILE]}"
         local CACHE_PATH="$CACHE_DIR/${FILE//\//_}"
         local detail=""
         local changed=false
 
-        if [ -f "$FILE" ] && [ -f "${CACHE_PATH}.1" ]; then
-            local meta_out=$(check_metadata_changes "$FILE")
-            if [ -n "$meta_out" ]; then
-                detail+="$meta_out\n"
+        # Случай 1: Файл существует
+        if [ -f "$FILE" ]; then
+            if [ -f "${CACHE_PATH}.1" ]; then
+                # Проверка метаданных
+                local meta_out=$(check_metadata_changes "$FILE")
+                if [ -n "$meta_out" ]; then
+                    detail+="$meta_out\n"
+                    changed=true
+                fi
+
+                # Проверка содержимого
+                local h1=$(sha256sum "$FILE" | cut -d' ' -f1)
+                local h2=$(sha256sum "${CACHE_PATH}.1" | cut -d' ' -f1)
+                if [ "$h1" != "$h2" ]; then
+                    mv -f "${CACHE_PATH}.1" "${CACHE_PATH}.2"
+                    if cp -p "$FILE" "${CACHE_PATH}.1"; then
+                        local diff_out=$(log_diff "$FILE")
+                        if [ -n "$diff_out" ]; then
+                            detail+="$diff_out"
+                            changed=true
+                        fi
+                    fi
+                fi
+
+                # Обновление метаданных кеша
+                if [ -n "$meta_out" ]; then
+                    chmod --reference="$FILE" "${CACHE_PATH}.1" 2>/dev/null || true
+                    chown --reference="$FILE" "${CACHE_PATH}.1" 2>/dev/null || true
+                fi
+            else
+                # Новый файл в мониторинге
+                create_cache_for_file "$FILE" "system"
+                detail="Initial cache created"
                 changed=true
             fi
 
-            local h1=$(sha256sum "$FILE" | cut -d' ' -f1)
-            local h2=$(sha256sum "${CACHE_PATH}.1" | cut -d' ' -f1)
-            if [ "$h1" != "$h2" ]; then
-                mv -f "${CACHE_PATH}.1" "${CACHE_PATH}.2"
-                if cp -p "$FILE" "${CACHE_PATH}.1"; then
-                    local diff_out=$(log_diff "$FILE")
-                    if [ -n "$diff_out" ]; then
-                        detail+="$diff_out"
-                        changed=true
-                    fi
-                fi
-            fi
+        # Случай 2: Файл удалён
+        elif [ ! -f "$FILE" ] && [ -f "${CACHE_PATH}.1" ] ; then
+            local CMD=$(ausearch -a "$ID" -i 2>/dev/null | sed -n "s/.*proctitle=//p")
+            [ -z "$CMD" ] && CMD="unknown command"
 
-            if [ -n "$meta_out" ]; then
-                chmod --reference="$FILE" "${CACHE_PATH}.1" 2>/dev/null || true
-                chown --reference="$FILE" "${CACHE_PATH}.1" 2>/dev/null || true
-            fi
-        elif [ -f "$FILE" ] && [ ! -f "${CACHE_PATH}.1" ]; then
-            create_cache_for_file "$FILE" "$USER"
-            detail="Initial cache created"
-            changed=true
+            detail="File DELETED by: $CMD (event ID: $ID)"
+            log_event "DELETED" "$FILE" "$detail" "$USER"
+
+            # Помечаем кеш как удалённый
+            mv "${CACHE_PATH}.1" "${CACHE_PATH}.deleted"
+            [ -f "${CACHE_PATH}.2" ] && rm -f "${CACHE_PATH}.2"
+            continue
         fi
 
-        [ "$changed" = true ] && log_event "modified" "$FILE" "$detail" "$USER"
+        # Логируем изменения только для существующих файлов
+        if [ "$changed" = true ] && [ -f "$FILE" ]; then
+            # Получаем команду, которая вызвала изменение
+            local CMD=$(ausearch -a "$ID" -i 2>/dev/null | sed -n "s/.*proctitle=//p")
+            [ -z "$CMD" ] && CMD="unknown command"
+
+            # Формируем детали в правильном порядке
+            local cmd_detail="Command triggered change: $CMD (event ID: $ID)\n"
+            if [ -n "$detail" ]; then
+                detail="$cmd_detail\n$detail"
+            else
+                detail="$cmd_detail"
+            fi
+
+            log_event "modified" "$FILE" "$detail" "$USER"
+        fi
     done
-}
-
-# --- Обработчик перезагрузки конфигурации ---
-reload_config() {
-    {
-        echo
-        printf '#%.0s' {1..100}; echo
-        echo "$(date '+%d %b %Y %H:%M:%S') - Received SIGHUP: reloading configuration..."
-        printf '#%.0s' {1..100}; echo
-    } >> "$LOG_FILE"
-
-    # Сохраняем текущие значения на случай ошибки
-    local backup_cache_dir="$CACHE_DIR"
-    local backup_log_file="$LOG_FILE"
-    local backup_interval="$INTERVAL"
-    local backup_audit_key="$AUDIT_KEY"
-    local backup_enable_diff="$enable_diff"
-    local backup_max_file_size_kb="$max_file_size_kb"
-    local -a backup_paths=("${PATHS[@]}")
-
-    if load_config && create_audit_rules; then
-        init_cache_for_monitored_files
-        {
-            echo "Configuration reloaded successfully."
-            echo
-        } >> "$LOG_FILE"
-    else
-        # Восстанавливаем старую конфигурацию
-        CACHE_DIR="$backup_cache_dir"
-        LOG_FILE="$backup_log_file"
-        INTERVAL="$backup_interval"
-        AUDIT_KEY="$backup_audit_key"
-        enable_diff="$backup_enable_diff"
-        max_file_size_kb="$backup_max_file_size_kb"
-        PATHS=("${backup_paths[@]}")
-        {
-            echo "ERROR: Failed to reload config. Keeping previous settings."
-            echo
-        } >> "$LOG_FILE"
-        logger -t "file-monitor" "Config reload failed, keeping old config."
-    fi
 }
 
 # --------------------------------------------------------------------------------------------------
 # === ОСНОВНОЕ ВЫПОЛНЕНИЕ ===
 # --------------------------------------------------------------------------------------------------
 
-# Устанавливаем обработчик перечитывания конфигурации
-trap reload_config HUP
-
 # Загружаем конфиг
 if ! load_config; then
     logger -t "file-monitor" "Failed to load initial configuration. Exiting."
     exit 1
 fi
-
 # Создаём правила и кэш
 if ! create_audit_rules; then
     logger -t "file-monitor" "Failed to create audit rules. Exiting."
     exit 1
 fi
-
 init_cache_for_monitored_files
-
 # Главный цикл
 while true; do
     parse_audit_events
